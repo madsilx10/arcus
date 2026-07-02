@@ -118,10 +118,9 @@ async function walletFlow(privateKey) {
   log(`[WALLET] address: ${address}`);
 
   const validUntil = Date.now() + 3600_000; // +1 jam
-  const publicKeyHex = ethers.SigningKey.computePublicKey(
-    wallet.signingKey.publicKey,
-    false
-  ).slice(2); // uncompressed, tanpa 0x
+  // apiWalletPublicKey: 32-byte random hex, identifier API wallet terpisah
+  // (BUKAN diturunkan dari private key wallet utama - beda dari address wallet)
+  const publicKeyHex = crypto.randomBytes(32).toString("hex");
 
   const messageObj = {
     apiWalletName: "arcus-referrals",
@@ -210,12 +209,42 @@ async function walletFlow(privateKey) {
 
 // ================== STEP 2: X OAUTH (PKCE) ==================
 
+async function getGuestId() {
+  try {
+    const r = await axios.post(
+      `${X_API}/1.1/guest/activate.json`,
+      {},
+      {
+        headers: {
+          Authorization: `Bearer ${X_BEARER}`,
+          "User-Agent": UA,
+        },
+        validateStatus: () => true,
+      }
+    );
+    if (r.status === 200 && r.data?.guest_token) {
+      log(`[X-OAUTH] guest_token diperoleh`);
+      return r.data.guest_token;
+    }
+    log(`[X-OAUTH] gagal ambil guest_token: ${r.status}`);
+  } catch (err) {
+    log(`[X-OAUTH] guest_token ERROR: ${err.message}`);
+  }
+  return null;
+}
+
 async function xOauthFlow(authToken, ct0) {
   const codeVerifier = genCodeVerifier();
   const codeChallenge = genCodeChallenge(codeVerifier);
   const state = genState();
 
-  const cookieHeader = `auth_token=${authToken}; ct0=${ct0}`;
+  const guestToken = await getGuestId();
+  const guestId = guestToken ? `v1%3A${Date.now()}` : null;
+
+  let cookieHeader = `auth_token=${authToken}; ct0=${ct0}`;
+  if (guestId) {
+    cookieHeader += `; guest_id=${guestId}; guest_id_ads=${guestId}; guest_id_marketing=${guestId}`;
+  }
 
   const authorizeParams = new URLSearchParams({
     client_id: X_OAUTH_CLIENT_ID,
