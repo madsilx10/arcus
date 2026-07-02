@@ -1,0 +1,12 @@
+{
+  "name": "arcus-join",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node arcus_join.js"
+  },
+  "dependencies": {
+    "axios": "^1.7.7",
+    "ethers": "^6.13.2"
+  }
+}
