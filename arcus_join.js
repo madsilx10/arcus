@@ -175,10 +175,10 @@ async function walletFlow(privateKey) {
   // ---- registeraffiliate ----
   const affBody = { address, code: REFERRAL_CODE };
   const affBodyStr = JSON.stringify(affBody);
-  const timestamp = String(Date.now() * 1_000_000); // nanosecond, ASUMSI
+  const timestamp = String(Date.now() * 1_000_000); // nanosecond
 
-  // ASUMSI: HMAC-SHA256(apiKey, body+timestamp) -> perlu dicek kalau error
-  const sigPayload = `${affBodyStr}${timestamp}`;
+  // HMAC-SHA256: key=apiKey, payload=timestamp+body
+  const sigPayload = `${timestamp}${affBodyStr}`;
   const xSignature = crypto
     .createHmac("sha256", apiKey)
     .update(sigPayload)
