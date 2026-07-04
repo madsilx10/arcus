@@ -118,8 +118,12 @@ async function walletFlow(privateKey) {
   const address = wallet.address;
   log(`[WALLET] address: ${address}`);
 
-  const validUntil = Date.now() + 15_000_000_000; // ~173 hari, sesuai observed behavior
-  const publicKeyHex = crypto.randomBytes(32).toString("hex"); // tanpa 0x
+  const validUntil = Date.now() + 15_000_000_000;
+  
+  // Generate keypair — secretKeyHex dipakai untuk HMAC X-Signature
+  // publicKeyHex dikirim ke server sebagai identifier
+  const secretKeyHex = crypto.randomBytes(32).toString("hex");
+  const publicKeyHex = crypto.createHash("sha256").update(secretKeyHex).digest("hex");
 
   // Message harus pakai apiWalletPublicKey (bukan publicKey), tanpa 0x
   const messageObj = {
@@ -172,23 +176,34 @@ async function walletFlow(privateKey) {
     return { apiKey: null, address };
   }
 
+  // ---- ambil server timestamp ----
+  let timeNs;
+  try {
+    const tr = await axios.get(`${ARCUS_API}/time`, { headers, validateStatus: () => true });
+    timeNs = String(tr.data.timeNs);
+    log(`[WALLET] server timeNs: ${timeNs}`);
+  } catch (e) {
+    timeNs = String(BigInt(Date.now()) * 1_000_000n);
+    log(`[WALLET] fallback timeNs: ${timeNs}`);
+  }
+
   // ---- registeraffiliate ----
+  const affPath = "/v1/affiliate/registeraffiliate";
   const affBody = { address, code: REFERRAL_CODE };
   const affBodyStr = JSON.stringify(affBody);
-  const timestamp = String(Date.now() * 1_000_000); // nanosecond
 
-  // HMAC-SHA256: key=apiKey, payload=timestamp+body
-  const sigPayload = `${timestamp}${affBodyStr}`;
+  // Payload = timestamp + path + body (dari source JS: `${s}${f7e(e)}${r}`)
+  const sigPayload = `${timeNs}${affPath}${affBodyStr}`;
   const xSignature = crypto
-    .createHmac("sha256", apiKey)
+    .createHmac("sha256", Buffer.from(secretKeyHex, "hex"))
     .update(sigPayload)
     .digest("hex");
 
   const affHeaders = {
     ...headers,
-    "X-Api-Key": apiKey,
+    "X-Api-Key": publicKeyHex,
     "X-Signature": xSignature,
-    "X-Timestamp": timestamp,
+    "X-Timestamp": timeNs,
   };
 
   try {
@@ -206,7 +221,7 @@ async function walletFlow(privateKey) {
     log(`[WALLET] registeraffiliate ERROR: ${err.message}`);
   }
 
-  return { apiKey, address, signature: flatSig };
+  return { apiKey, address, signature: flatSig, secretKeyHex, publicKeyHex };
 }
 
 // ================== STEP 2: X OAUTH (PKCE) ==================
