@@ -156,6 +156,7 @@ async function walletFlow(privateKey) {
     "User-Agent": UA,
   };
 
+  log(`[WALLET] createapikey body: ${JSON.stringify(body, null, 2)}`);
   let apiKey = null;
   try {
     const resp = await axios.post(`${ARCUS_API}/createapikey`, body, {
@@ -288,6 +289,8 @@ async function xOauthFlow(authToken, ct0) {
       { headers: headersX, validateStatus: () => true }
     );
     log(`[X-OAUTH] step1 authorize GET -> ${r1.status}`);
+    log(`[X-OAUTH] step1 headers sent: ${JSON.stringify(headersX)}`);
+    log(`[X-OAUTH] step1 response: ${JSON.stringify(r1.data).slice(0, 500)}`);
     if (r1.status !== 200) {
       log(`[X-OAUTH] FAILED step1: ${JSON.stringify(r1.data).slice(0, 300)}`);
       return null;
