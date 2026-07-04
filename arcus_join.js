@@ -123,10 +123,10 @@ async function walletFlow(privateKey) {
   // (BUKAN diturunkan dari private key wallet utama - beda dari address wallet)
   const publicKeyHex = "0x" + crypto.randomBytes(32).toString("hex");
 
-  // Key order harus sama persis antara messageObj yg di-sign dan body yg dikirim
+  // Sign message pakai field name yang sama persis dengan body
   const messageObj = {
     apiWalletName: "arcus-referrals",
-    apiWalletPublicKey: publicKeyHex,
+    publicKey: publicKeyHex,
     validUntil,
   };
   const messageStr = JSON.stringify(messageObj);
