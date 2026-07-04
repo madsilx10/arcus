@@ -198,7 +198,7 @@ async function walletFlow(privateKey) {
 
   // ---- registeraffiliate ----
   const affPath = "/v1/affiliate/registeraffiliate";
-  const affBody = { address, code: REFERRAL_CODE };
+  const affBody = { address: address.toLowerCase(), code: REFERRAL_CODE };
   const affBodyStr = JSON.stringify(affBody);
 
   // Payload = timestamp + path + body, di-encode ke Uint8Array
