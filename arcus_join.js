@@ -119,20 +119,20 @@ async function walletFlow(privateKey) {
   log(`[WALLET] address: ${address}`);
 
   const validUntil = Date.now() + 15_000_000_000;
-  
-  // Generate Ed25519 keypair — secretKeyHex = seed, publicKeyHex dikirim ke server
-  const secretKeyHex = crypto.randomBytes(32).toString("hex");
-  const secretKeySeed = Buffer.from(secretKeyHex, "hex");
+
+  // Generate Ed25519 keypair — sama persis dengan CA.utils.randomSecretKey() + CA.getPublicKey()
+  const secretKeySeed = crypto.randomBytes(32); // raw bytes
   const edPrivKey = crypto.createPrivateKey({
-    key: Buffer.concat([
-      Buffer.from("302e020100300506032b657004220420", "hex"),
-      secretKeySeed,
-    ]),
+    key: Buffer.concat([Buffer.from("302e020100300506032b657004220420", "hex"), secretKeySeed]),
     format: "der",
     type: "pkcs8",
   });
   const edPubKey = crypto.createPublicKey(edPrivKey);
-  const publicKeyHex = edPubKey.export({ type: "spki", format: "der" }).slice(-32).toString("hex");
+  const pubKeyBytes = edPubKey.export({ type: "spki", format: "der" }).slice(-32);
+
+  // AA(r) = base64 encode
+  const publicKeyHex = pubKeyBytes.toString("base64");   // nama "Hex" tapi isinya base64
+  const secretKeyHex = secretKeySeed.toString("base64"); // sama
 
   // Message harus pakai apiWalletPublicKey (bukan publicKey), tanpa 0x
   const messageObj = {
@@ -203,6 +203,7 @@ async function walletFlow(privateKey) {
 
   // Payload = timestamp + path + body, di-encode ke Uint8Array
   const sigPayload = Buffer.from(`${timeNs}${affPath}${affBodyStr}`);
+  // AA(a) = base64 encode
   const xSignature = crypto.sign(null, sigPayload, edPrivKey).toString("base64");
 
   const affHeaders = {
