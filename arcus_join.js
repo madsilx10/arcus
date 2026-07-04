@@ -138,11 +138,9 @@ async function walletFlow(privateKey) {
   const body = {
     address,
     apiWalletName: "arcus-referrals",
-    apiWalletPublicKey: publicKeyHex,   // field name harus sama persis dgn yg di-sign
-    keyName: "Arcus Referrals",
     publicKey: publicKeyHex,
     signature: {
-      r: sig.r,   // ethers v6: r/s sudah 0x-prefixed 32byte hex
+      r: sig.r,
       s: sig.s,
       v: sig.v,
     },
@@ -215,11 +213,17 @@ async function walletFlow(privateKey) {
 // ================== STEP 2: X OAUTH (PKCE) ==================
 
 async function getGuestId() {
-  try {
-    const r = await axios.post(
-      `${X_API}/1.1/guest/activate.json`,
-      {},
-      {
+  // Coba endpoint utama dulu
+  const endpoints = [
+    { url: `${X_API}/1.1/guest/activate.json`, method: "post" },
+    { url: `https://api.x.com/1.1/guest/activate.json`, method: "post" },
+  ];
+
+  for (const ep of endpoints) {
+    try {
+      const r = await axios({
+        method: ep.method,
+        url: ep.url,
         headers: {
           Authorization: `Bearer ${X_BEARER}`,
           "User-Agent": UA,
@@ -232,15 +236,15 @@ async function getGuestId() {
           "x-twitter-client-language": "en",
         },
         validateStatus: () => true,
+      });
+      if (r.status === 200 && r.data?.guest_token) {
+        log(`[X-OAUTH] guest_token diperoleh: ${r.data.guest_token}`);
+        return r.data.guest_token;
       }
-    );
-    if (r.status === 200 && r.data?.guest_token) {
-      log(`[X-OAUTH] guest_token diperoleh: ${r.data.guest_token}`);
-      return r.data.guest_token;
+      log(`[X-OAUTH] ${ep.url} -> ${r.status}`);
+    } catch (err) {
+      log(`[X-OAUTH] guest_token ERROR: ${err.message}`);
     }
-    log(`[X-OAUTH] gagal ambil guest_token: ${r.status} - lanjut tanpa guest_token`);
-  } catch (err) {
-    log(`[X-OAUTH] guest_token ERROR: ${err.message} - lanjut tanpa guest_token`);
   }
   return null;
 }
@@ -284,13 +288,25 @@ async function xOauthFlow(authToken, ct0) {
 
   let authCode = null;
   try {
-    const r1 = await axios.get(
+    let r1 = await axios.get(
       `${X_API}/2/oauth2/authorize?${authorizeParams.toString()}`,
       { headers: headersX, validateStatus: () => true }
     );
     log(`[X-OAUTH] step1 authorize GET -> ${r1.status}`);
-    log(`[X-OAUTH] step1 headers sent: ${JSON.stringify(headersX)}`);
     log(`[X-OAUTH] step1 response: ${JSON.stringify(r1.data).slice(0, 500)}`);
+
+    // Kalau 401, coba tanpa Authorization Bearer (pure cookie auth)
+    if (r1.status === 401) {
+      log(`[X-OAUTH] step1 retry tanpa Bearer...`);
+      const headersNoBear = { ...headersX };
+      delete headersNoBear.Authorization;
+      r1 = await axios.get(
+        `${X_API}/2/oauth2/authorize?${authorizeParams.toString()}`,
+        { headers: headersNoBear, validateStatus: () => true }
+      );
+      log(`[X-OAUTH] step1 retry -> ${r1.status} | ${JSON.stringify(r1.data).slice(0, 300)}`);
+    }
+
     if (r1.status !== 200) {
       log(`[X-OAUTH] FAILED step1: ${JSON.stringify(r1.data).slice(0, 300)}`);
       return null;
