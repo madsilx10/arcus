@@ -203,7 +203,7 @@ async function walletFlow(privateKey) {
 
   // Payload = timestamp + path + body, di-encode ke Uint8Array
   const sigPayload = Buffer.from(`${timeNs}${affPath}${affBodyStr}`);
-  // AA(a) = base64 encode
+  log(`[WALLET] sig payload: ${timeNs}${affPath}${affBodyStr}`);
   const xSignature = crypto.sign(null, sigPayload, edPrivKey).toString("base64url");
 
   const affHeaders = {
@@ -228,7 +228,7 @@ async function walletFlow(privateKey) {
     log(`[WALLET] registeraffiliate ERROR: ${err.message}`);
   }
 
-  return { apiKey, address, signature: flatSig, secretKeyHex, publicKeyHex };
+  return { apiKey, address, signature: flatSig, publicKeyHex };
 }
 
 // ================== STEP 2: X OAUTH (PKCE) ==================
