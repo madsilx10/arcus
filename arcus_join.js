@@ -81,14 +81,15 @@ function loadWallets(path) {
 
 function loadCookies(path) {
   if (!fs.existsSync(path)) return [];
-  const lines = fs
-    .readFileSync(path, "utf-8")
-    .split("\n")
-    .map((l) => l.trim())
-    .filter(Boolean);
+  const raw = fs.readFileSync(path, "utf-8");
+  // Split per blok (dipisah baris kosong), tiap blok = 1 akun
+  const blocks = raw.split(/\n\s*\n/).map((b) => b.trim()).filter(Boolean);
   const pairs = [];
-  for (let i = 0; i < lines.length - 1; i += 2) {
-    pairs.push({ auth_token: lines[i], ct0: lines[i + 1] });
+  for (const block of blocks) {
+    const lines = block.split("\n").map((l) => l.trim()).filter(Boolean);
+    if (lines.length >= 2) {
+      pairs.push({ auth_token: lines[0], ct0: lines[1] });
+    }
   }
   return pairs;
 }
@@ -120,14 +121,16 @@ async function walletFlow(privateKey) {
   const validUntil = Date.now() + 3600_000; // +1 jam
   // apiWalletPublicKey: 32-byte random hex, identifier API wallet terpisah
   // (BUKAN diturunkan dari private key wallet utama - beda dari address wallet)
-  const publicKeyHex = crypto.randomBytes(32).toString("hex");
+  const publicKeyHex = "0x" + crypto.randomBytes(32).toString("hex");
 
+  // Key order harus sama persis antara messageObj yg di-sign dan body yg dikirim
   const messageObj = {
     apiWalletName: "arcus-referrals",
     apiWalletPublicKey: publicKeyHex,
     validUntil,
   };
   const messageStr = JSON.stringify(messageObj);
+  log(`[WALLET] signing message: ${messageStr}`);
 
   const flatSig = await wallet.signMessage(messageStr);
   const sig = ethers.Signature.from(flatSig);
@@ -135,11 +138,12 @@ async function walletFlow(privateKey) {
   const body = {
     address,
     apiWalletName: "arcus-referrals",
+    apiWalletPublicKey: publicKeyHex,   // field name harus sama persis dgn yg di-sign
     keyName: "Arcus Referrals",
     publicKey: publicKeyHex,
     signature: {
-      r: sig.r.slice(2),
-      s: sig.s.slice(2),
+      r: sig.r,   // ethers v6: r/s sudah 0x-prefixed 32byte hex
+      s: sig.s,
       v: sig.v,
     },
     validUntil,
@@ -218,17 +222,24 @@ async function getGuestId() {
         headers: {
           Authorization: `Bearer ${X_BEARER}`,
           "User-Agent": UA,
+          "Accept": "*/*",
+          "Accept-Language": "en-US,en;q=0.9",
+          "Content-Type": "application/x-www-form-urlencoded",
+          "Origin": "https://x.com",
+          "Referer": "https://x.com/",
+          "x-twitter-active-user": "yes",
+          "x-twitter-client-language": "en",
         },
         validateStatus: () => true,
       }
     );
     if (r.status === 200 && r.data?.guest_token) {
-      log(`[X-OAUTH] guest_token diperoleh`);
+      log(`[X-OAUTH] guest_token diperoleh: ${r.data.guest_token}`);
       return r.data.guest_token;
     }
-    log(`[X-OAUTH] gagal ambil guest_token: ${r.status}`);
+    log(`[X-OAUTH] gagal ambil guest_token: ${r.status} - lanjut tanpa guest_token`);
   } catch (err) {
-    log(`[X-OAUTH] guest_token ERROR: ${err.message}`);
+    log(`[X-OAUTH] guest_token ERROR: ${err.message} - lanjut tanpa guest_token`);
   }
   return null;
 }
@@ -239,7 +250,7 @@ async function xOauthFlow(authToken, ct0) {
   const state = genState();
 
   const guestToken = await getGuestId();
-  const guestId = guestToken ? `v1%3A${Date.now()}` : null;
+  const guestId = guestToken ? `v1%3A${guestToken}` : null;
 
   let cookieHeader = `auth_token=${authToken}; ct0=${ct0}`;
   if (guestId) {
@@ -259,12 +270,15 @@ async function xOauthFlow(authToken, ct0) {
   const headersX = {
     Authorization: `Bearer ${X_BEARER}`,
     "User-Agent": UA,
+    "Accept": "*/*",
+    "Accept-Language": "en-US,en;q=0.9",
     Referer: `https://x.com/i/oauth2/authorize`,
     Cookie: cookieHeader,
     "X-Csrf-Token": ct0,
     "X-Twitter-Active-User": "yes",
     "X-Twitter-Auth-Type": "OAuth2Session",
-    "X-Twitter-Client-Language": "id",
+    "X-Twitter-Client-Language": "en",
+    ...(guestToken && { "X-Guest-Token": guestToken }),
   };
 
   let authCode = null;
@@ -314,7 +328,7 @@ async function xOauthFlow(authToken, ct0) {
       if (m) authorizationCode = decodeURIComponent(m[1]);
     }
     if (!authorizationCode && r2.data) {
-      authorizationCode = r2.data.redirect_uri || r2.data.code || null;
+      authorizationCode = r2.data.code || null;
     }
     if (!authorizationCode) {
       log(`[X-OAUTH] gagal dapat authorization_code. body: ${JSON.stringify(r2.data).slice(0, 300)}`);
@@ -354,7 +368,7 @@ async function xOauthFlow(authToken, ct0) {
       return null;
     }
 
-    const privyToken = r3.data.token;
+    const privyToken = r3.data.identity_token || r3.data.token;
     const linked = r3.data?.user?.linked_accounts || [];
     const xHandle = linked.find((a) => a.type === "twitter_oauth")?.username;
 
@@ -491,7 +505,7 @@ async function main() {
       continue;
     }
     await processAccount(i, wallets[i], cookies[i]);
-    await sleep(1000 + Math.random() * 2000);
+    await sleep(3000 + Math.random() * 4000);
   }
 
   console.log("\nSelesai. Cek log di atas untuk hasil tiap akun.");
