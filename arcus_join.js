@@ -118,15 +118,13 @@ async function walletFlow(privateKey) {
   const address = wallet.address;
   log(`[WALLET] address: ${address}`);
 
-  const validUntil = Date.now() + 3600_000; // +1 jam
-  // apiWalletPublicKey: 32-byte random hex, identifier API wallet terpisah
-  // (BUKAN diturunkan dari private key wallet utama - beda dari address wallet)
-  const publicKeyHex = "0x" + crypto.randomBytes(32).toString("hex");
+  const validUntil = Date.now() + 15_000_000_000; // ~173 hari, sesuai observed behavior
+  const publicKeyHex = crypto.randomBytes(32).toString("hex"); // tanpa 0x
 
-  // Sign message pakai field name yang sama persis dengan body
+  // Message harus pakai apiWalletPublicKey (bukan publicKey), tanpa 0x
   const messageObj = {
     apiWalletName: "arcus-referrals",
-    publicKey: publicKeyHex,
+    apiWalletPublicKey: publicKeyHex,
     validUntil,
   };
   const messageStr = JSON.stringify(messageObj);
@@ -137,10 +135,15 @@ async function walletFlow(privateKey) {
 
   const body = {
     address,
-    apiWalletName: "arcus-referrals",
     publicKey: publicKeyHex,
-    signature: flatSig,   // flat hex: 0x{r}{s}{v}
+    apiWalletName: "arcus-referrals",
+    keyName: "Arcus Referrals",
     validUntil,
+    signature: {
+      r: sig.r.slice(2),  // tanpa 0x
+      s: sig.s.slice(2),  // tanpa 0x
+      v: sig.v.toString(16), // hex string e.g. "1c"
+    },
   };
 
   const headers = {
@@ -203,7 +206,7 @@ async function walletFlow(privateKey) {
     log(`[WALLET] registeraffiliate ERROR: ${err.message}`);
   }
 
-  return { apiKey, address };
+  return { apiKey, address, signature: flatSig };
 }
 
 // ================== STEP 2: X OAUTH (PKCE) ==================
@@ -397,15 +400,15 @@ async function xOauthFlow(authToken, ct0) {
 
 // ================== STEP 3: JOIN WAITLIST ==================
 
-async function joinWaitlist(privyToken, xHandle, address) {
+async function joinWaitlist(address, signature) {
   const headers = {
     "Content-Type": "application/json",
+    "ngrok-skip-browser-warning": "1",
     Origin: ORIGIN,
     Referer: ORIGIN + "/",
-    "Privy-Id-Token": privyToken,
     "User-Agent": UA,
   };
-  const body = { xHandle: `@${xHandle}`, ethereumAddress: address };
+  const body = { ethereumAddress: address, signature };
 
   try {
     const r = await axios.post(`${WAITLIST_API}/joinWithAddress`, body, {
@@ -464,19 +467,13 @@ async function autoFollow(authToken, ct0, target) {
 async function processAccount(idx, privateKey, cookiePair) {
   log(`\n===== AKUN #${idx + 1} =====`);
 
-  const { apiKey, address } = await walletFlow(privateKey);
+  const { apiKey, address, signature } = await walletFlow(privateKey);
   if (!address) {
     log("[SKIP] wallet flow gagal total");
     return;
   }
 
-  const oauth = await xOauthFlow(cookiePair.auth_token, cookiePair.ct0);
-  if (!oauth || !oauth.privyToken) {
-    log("[SKIP] X OAuth gagal, join & follow dilewati");
-    return;
-  }
-
-  await joinWaitlist(oauth.privyToken, oauth.xHandle, address);
+  await joinWaitlist(address, signature);
   await autoFollow(cookiePair.auth_token, cookiePair.ct0, FOLLOW_TARGET_SCREEN_NAME);
 }
 
