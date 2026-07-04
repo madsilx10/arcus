@@ -204,7 +204,7 @@ async function walletFlow(privateKey) {
   // Payload = timestamp + path + body, di-encode ke Uint8Array
   const sigPayload = Buffer.from(`${timeNs}${affPath}${affBodyStr}`);
   // AA(a) = base64 encode
-  const xSignature = crypto.sign(null, sigPayload, edPrivKey).toString("base64");
+  const xSignature = crypto.sign(null, sigPayload, edPrivKey).toString("base64url");
 
   const affHeaders = {
     ...headers,
