@@ -139,11 +139,7 @@ async function walletFlow(privateKey) {
     address,
     apiWalletName: "arcus-referrals",
     publicKey: publicKeyHex,
-    signature: {
-      r: sig.r,
-      s: sig.s,
-      v: sig.v,
-    },
+    signature: flatSig,   // flat hex: 0x{r}{s}{v}
     validUntil,
   };
 
