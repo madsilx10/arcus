@@ -131,13 +131,13 @@ async function walletFlow(privateKey) {
   const pubKeyBytes = edPubKey.export({ type: "spki", format: "der" }).slice(-32);
 
   // AA(r) = base64 encode
-  const publicKeyHex = pubKeyBytes.toString("hex");     // 64-char hex untuk X-Api-Key
-  const secretKeyHex = secretKeySeed.toString("base64"); // base64 untuk internal storage
+  const publicKeyHex = pubKeyBytes.toString("hex");      // hex untuk X-Api-Key header
+  const publicKeyB64 = pubKeyBytes.toString("base64");   // base64 untuk createapikey body
 
-  // Message harus pakai apiWalletPublicKey (bukan publicKey), tanpa 0x
+  // Message pakai base64 public key (sesuai source JS: AA(r))
   const messageObj = {
     apiWalletName: "arcus-referrals",
-    apiWalletPublicKey: publicKeyHex,
+    apiWalletPublicKey: publicKeyB64,
     validUntil,
   };
   const messageStr = JSON.stringify(messageObj);
@@ -148,14 +148,14 @@ async function walletFlow(privateKey) {
 
   const body = {
     address,
-    publicKey: publicKeyHex,
+    publicKey: publicKeyB64,   // base64 sesuai source JS
     apiWalletName: "arcus-referrals",
     keyName: "Arcus Referrals",
     validUntil,
     signature: {
-      r: sig.r.slice(2),  // tanpa 0x
-      s: sig.s.slice(2),  // tanpa 0x
-      v: sig.v.toString(16), // hex string e.g. "1c"
+      r: sig.r.slice(2),
+      s: sig.s.slice(2),
+      v: sig.v.toString(16),
     },
   };
 
