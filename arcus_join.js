@@ -131,8 +131,8 @@ async function walletFlow(privateKey) {
   const pubKeyBytes = edPubKey.export({ type: "spki", format: "der" }).slice(-32);
 
   // AA(r) = base64 encode
-  const publicKeyHex = pubKeyBytes.toString("base64");   // nama "Hex" tapi isinya base64
-  const secretKeyHex = secretKeySeed.toString("base64"); // sama
+  const publicKeyHex = pubKeyBytes.toString("hex");     // 64-char hex untuk X-Api-Key
+  const secretKeyHex = secretKeySeed.toString("base64"); // base64 untuk internal storage
 
   // Message harus pakai apiWalletPublicKey (bukan publicKey), tanpa 0x
   const messageObj = {
